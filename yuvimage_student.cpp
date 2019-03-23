@@ -21,9 +21,10 @@
 #include <iostream>
 #include <fstream>
 #include <memory>
-//#include <Eigen/Dense>
 #include "gse4_util.h"
 #include <chrono>
+#include <thread>
+#include "imageparameters.h"
 
 
 // Convert a single yuv point to rgb color
@@ -53,30 +54,39 @@ int YuvImage::trans(int i) {
     int colone = (i%width_)/2;
     return colone+rang*(width_/2);
 }
-
+//int test = 0;
+//int testt[4]={0,0,0,0};
 void YuvImage::yuv_to_rgb(size_t groupe_idx) {
-    int j;
-    int i = 0;
+    int i,i_begin,i_end;
+    i_begin = groupe_idx*total_pixels/nb_threads;
+    i_end = (groupe_idx+1)*total_pixels/nb_threads;
+    std::cout<<"i_begin :"<<i_begin<<std::endl;
+    std::cout<<"i_end :"<<i_end<<std::endl;
 
-    r_ = new double [width_*height_];
-    g_ = new double [width_*height_];
-    b_ = new double [width_*height_];
-
-   for(j=0 ; j < width_*height_ ; ++j) {
-        i=YuvImage::trans(j);
-        r_[j] = 1.1643836*y_raw_[j] +         0*u_raw_[i] + 1.8765140*v_raw_[i] - 268.2065015;
-        g_[j] = 1.1643836*y_raw_[j] - 0.2132486*u_raw_[i] - 0.5578116*v_raw_[i] + 82.8546329;
-        b_[j] = 1.1643836*y_raw_[j] + 2.1124018*u_raw_[i] -         0*v_raw_[i] - 289.0175656;
+    for(i=i_begin ; i < i_end ; ++i) {
+        r_[i] = 1.1643836*y_raw_[i] +         0*u_raw_[trans(i)] + 1.8765140*v_raw_[trans(i)] - 268.2065015;
+        g_[i] = 1.1643836*y_raw_[i] - 0.2132486*u_raw_[trans(i)] - 0.5578116*v_raw_[trans(i)] + 82.8546329;
+        b_[i] = 1.1643836*y_raw_[i] + 2.1124018*u_raw_[trans(i)] -         0*v_raw_[trans(i)] - 289.0175656;
     }
-
 }
+//void YuvImage::yuv_to_rgb(size_t groupe_idx) {
+//    int i;
+//    r_ = new double [width_*height_];
+//    g_ = new double [width_*height_];
+//    b_ = new double [width_*height_];
 
+//   for(i=0 ; i < width_*height_ ; ++i) {
+//        r_[i] = 1.1643836*y_raw_[i] +         0*u_raw_[trans(i)] + 1.8765140*v_raw_[trans(i)] - 268.2065015;
+//        g_[i] = 1.1643836*y_raw_[i] - 0.2132486*u_raw_[trans(i)] - 0.5578116*v_raw_[trans(i)] + 82.8546329;
+//        b_[i] = 1.1643836*y_raw_[i] + 2.1124018*u_raw_[trans(i)] -         0*v_raw_[trans(i)] - 289.0175656;
+//    }
+//}
 // Assist function for YUV to RGB image creation
 // allocate the memory buffers
 // and read raw yuv from the ifstream into the buffers
 //
 void YuvImage::load_from_stream(std::ifstream &yuv_strm) {
-    auto ysize = width_*height_;
+    auto ysize = total_pixels;
     auto uv_size = ysize >> 2;
 
     y_raw_ = new uint8_t [ysize];
@@ -90,19 +100,20 @@ void YuvImage::load_from_stream(std::ifstream &yuv_strm) {
 }
 
 // Mesure du temps
-void YuvImage::time() {
+void YuvImage::time(std::string s) {
     size_t i=0;
-    auto time_start = std::chrono::high_resolution_clock::now();
-    //12 fois
-  //  for (int j=0; i<12; i++) {
-        YuvImage::yuv_to_rgb(i);
-  //  }
-    auto time_end = std::chrono::high_resolution_clock::now();
+//    auto time_start = std::chrono::high_resolution_clock::now();
+//    //12 fois
+//  //  for (int j=0; i<12; i++) {
+//        YuvImage::yuv_to_rgb(i);
+//  //  }
+//    auto time_end = std::chrono::high_resolution_clock::now();
 
-    auto elapsed_time_us = std::chrono::duration_cast<std::chrono::microseconds> (time_end - time_start);
-    long long int elapsed_time_us_eff = elapsed_time_us.count();
-    std::string s = std::to_string(elapsed_time_us_eff);
-    std::cout << "INFO: image calculed in " << s << std::endl;
+//    auto elapsed_time_us = std::chrono::duration_cast<std::chrono::microseconds> (time_end - time_start);
+//    long long int elapsed_time_us_eff = elapsed_time_us.count();
+//    std::string s = std::to_string(elapsed_time_us_eff);
+
+    //std::cout << "INFO: image calculed in " << s << std::endl;
     // Séparer le temps par virgule
     uint id = 0;
     const auto end_ = s.end();
@@ -129,11 +140,11 @@ YuvImage::YuvImage(const std::string &file_name) :
   QImage(default_width, default_height, QImage::Format_RGB32),
   width_{default_width},
   height_{default_height} {
+
   static GSE4::Clamp<double> clamp_to_rgb(0., 255.);
 
   // we find the width and height of the file
   // based on the size of the file
-
 
   // student version
   // all try catch block removed
@@ -151,11 +162,11 @@ YuvImage::YuvImage(const std::string &file_name) :
 
   auto ysize = (filesize * 2) / 3;
   if (((ysize * 3) / 2) != filesize && (((ysize * 3) / 2) % 6) == 0) {
-    // more code is needed here
+    // more code is needed here ?????????????????????
     throw wrong_size();
     qDebug("Wrong size");
   }
-    //auto uv_size = ysize >> 2;
+
     switch(ysize) {
      case(28000*4762): width_ = 28000; height_ = 4762; break;
      case(10000*4762): width_ = 10000; height_ = 4762; break;
@@ -166,10 +177,35 @@ YuvImage::YuvImage(const std::string &file_name) :
      case(352*288)   : width_ =   352; height_ =  288; break;
      default: throw wrong_size();
    }
-    size_t i=0;
+    total_pixels=width_*height_;
+    r_ = new double [total_pixels];
+    g_ = new double [total_pixels];
+    b_ = new double [total_pixels];
+
+    auto time_start = std::chrono::high_resolution_clock::now();
+
+    nb_threads = ImageParameters::instance().get_nb_threads();
+    std::vector<std::thread> threads;
     YuvImage::load_from_stream(yuv_strm);
-    YuvImage::yuv_to_rgb(i);
-    YuvImage::time();
+
+    size_t i=0;
+    //Launch a foup of threads
+
+    for (i = 1; i < nb_threads; ++i) {
+        threads.emplace_back([=]() {yuv_to_rgb(i);});
+        std::cout<<"i = " << i <<std::endl;
+    }
+    std::cout<<nb_threads<<std::endl;
+    yuv_to_rgb(0);
+    for (auto &thread_elem : threads) {
+      thread_elem.join();
+    }
+
+    auto time_end = std::chrono::high_resolution_clock::now();
+    auto elapsed_time_us = std::chrono::duration_cast<std::chrono::microseconds> (time_end - time_start);
+    long long int elapsed_time_us_eff = elapsed_time_us.count();
+    std::string s = std::to_string(elapsed_time_us_eff);
+    YuvImage::time(s);
   // create local image of given size
   // and swap with current image of the class
   QImage main_image(width_, height_, QImage::Format_RGB32);
@@ -181,6 +217,12 @@ YuvImage::YuvImage(const std::string &file_name) :
       }
   }
 
+//  std::cout<<"testt[]= :"<<testt[0]<<std::endl;
+//  std::cout<<"testt[]= :"<<testt[1]<<std::endl;
+//  std::cout<<"testt[]= :"<<testt[2]<<std::endl;
+//  std::cout<<"testt[]= :"<<testt[3]<<std::endl;
+  // les destructeurs
+
   delete [] y_raw_;
   delete [] u_raw_;
   delete [] v_raw_;
@@ -190,4 +232,3 @@ YuvImage::YuvImage(const std::string &file_name) :
   delete [] b_;
 
 }
-
