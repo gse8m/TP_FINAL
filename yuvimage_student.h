@@ -33,7 +33,7 @@ class YuvImage : public QImage {
   void load_from_stream(std::ifstream &yuv_strm);
   void yuv_to_rgb(size_t groupe_idx);
   int trans(int i);
-  void time();
+  void time(std::string s);
 
   // A nested class extending the exception class
   // we shall thow an exception if the size of the
@@ -60,10 +60,12 @@ class YuvImage : public QImage {
 private:
   int width_;
   int height_;
+  int total_pixels;
   uint8_t *y_raw_;
   uint8_t *u_raw_;
   uint8_t *v_raw_;
 
+  size_t nb_threads;
   double *r_;
   double *g_;
   double *b_;
