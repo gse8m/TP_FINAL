@@ -32,8 +32,9 @@ class YuvImage : public QImage {
   YuvImage(const YuvImage &image) = delete;
   void load_from_stream(std::ifstream &yuv_strm);
   void yuv_to_rgb(size_t groupe_idx);
+  void SIMD_yuv_to_rgb(int begin_, int end_);
   int trans(int i);
-  void time(std::string s);
+  void RGB_transfert_time_mesure();
 
   // A nested class extending the exception class
   // we shall thow an exception if the size of the
