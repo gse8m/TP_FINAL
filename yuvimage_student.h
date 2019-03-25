@@ -61,7 +61,7 @@ class YuvImage : public QImage {
 private:
   int width_;
   int height_;
-  int total_pixels;
+  double total_pixels;
   uint8_t *y_raw_;
   uint8_t *u_raw_;
   uint8_t *v_raw_;

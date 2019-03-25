@@ -31,13 +31,20 @@
 // based on BT.709 formula
 // Y = 0.2126*R + 0.7152*G + 0.0722*B
 //
-//static QRgb convert_yuv_to_rgb(uint8_t y, uint8_t u, uint8_t v) {
-//    static GSE4::Clamp<double> clamp_to_rgb(0., 255.);
-//    double r = y + 0*u       + 1.28033*v;
-//    double g = y - 0.21482*u - 0.38059*v;
-//    double b = y + 2.12798*u +       0*v;
-//    return qRgb(clamp_to_rgb(r), clamp_to_rgb(g), clamp_to_rgb(b));
-//}
+static QRgb convert_yuv_to_rgb(uint8_t y, uint8_t u, uint8_t v) {
+    static GSE4::Clamp<double> clamp_to_rgb(0., 255.);
+    double r = y + 0*u       + 1.28033*v;
+    double g = y - 0.21482*u - 0.38059*v;
+    double b = y + 2.12798*u +       0*v;
+    return qRgb(clamp_to_rgb(r), clamp_to_rgb(g), clamp_to_rgb(b));
+}
+
+// Renvoie l'indice du tableau u_raw et du tableau v_raw qui correspond à y_raw[i]
+int YuvImage::trans(int i) {
+    int rang = (i/width_)/2;
+    int colone = (i%width_)/2;
+    return colone+rang*(width_/2);
+}
 
 // Convert raw yuv data to rgb image
 // process image pixel by pixel
@@ -48,16 +55,11 @@
 // https://msdn.microsoft.com/en-us/library/windows/desktop/dd206750(v=vs.85).aspx
 //
 
-int YuvImage::trans(int i) {
-    int rang = (i/width_)/2;
-    int colone = (i%width_)/2;
-    return colone+rang*(width_/2);
-}
-
 void YuvImage::yuv_to_rgb(size_t groupe_idx) {
     int i,i_begin,i_end;
     i_begin =  groupe_idx    * total_pixels / nb_threads;
     i_end   = (groupe_idx+1) * total_pixels / nb_threads;
+
 
     if(ImageParameters::instance().get_simd()) {
        SIMD_yuv_to_rgb(i_begin, i_end);
@@ -120,22 +122,27 @@ void YuvImage::SIMD_yuv_to_rgb(int begin_, int end_){
 
 }
 
-
+// Assist function for YUV to RGB image creation
+// allocate the memory buffers
+// and read raw yuv from the ifstream into the buffers
+//
 void YuvImage::load_from_stream(std::ifstream &yuv_strm) {
     auto ysize = total_pixels;
     auto uv_size = ysize >> 2;
 
+   // Using new to allocate raw storage on the heap
     y_raw_ = new uint8_t [ysize];
     u_raw_ = new uint8_t [uv_size];
     v_raw_ = new uint8_t [uv_size];
 
+   // Pointer cast mandatory otherwise you have an error message
     yuv_strm.read(reinterpret_cast<char*>(y_raw_), ysize);
     yuv_strm.read(reinterpret_cast<char*>(u_raw_), uv_size);
     yuv_strm.read(reinterpret_cast<char*>(v_raw_), uv_size);
 
 }
 
-
+// Mesure le temps de la conversion d'image
 void YuvImage::RGB_transfert_time_mesure() {
     size_t i=0;
     nb_threads = ImageParameters::instance().get_nb_threads();
@@ -157,7 +164,11 @@ void YuvImage::RGB_transfert_time_mesure() {
     auto elapsed_time_us = std::chrono::duration_cast<std::chrono::microseconds> (time_end - time_start);
     long long int elapsed_time_us_eff = elapsed_time_us.count();
     std::string s = std::to_string(elapsed_time_us_eff);
+
     // Séparer le temps par virgule
+
+    //GSE4::Commify<double> digit_separator(elapsed_time_us_eff);
+    //std::cout << "INFO: image calculed in " <<digit_separator << " us" << std::endl;
     uint id = 0;
     const auto end_ = s.end();
     const auto size_ = s.size(); // pour éviter le changement de pointeur
@@ -187,8 +198,6 @@ YuvImage::YuvImage(const std::string &file_name) :
   // we find the width and height of the file
   // based on the size of the file
 
-  // student version
-  // all try catch block removed
   std::ifstream yuv_strm(file_name, std::ios::in | std::ios::binary);
 
   // position stream pointer at the end to read the file size...
@@ -198,13 +207,14 @@ YuvImage::YuvImage(const std::string &file_name) :
   // .. and don't forget to put it back to the beg so that we can read
   yuv_strm.seekg(0, std::ios::beg);
 
-  // a few lines of code needed here
   // to compute  width and height from the size of the file
-
+  // Le bloc try pour émettre les exceptions
+  boolean incorrect = false;
+  try{
   auto ysize = (filesize * 2) / 3;
   if (((ysize * 3) / 2) != filesize && (((ysize * 3) / 2) % 6) == 0) {
-    // more code is needed here
     throw wrong_size();
+    incorrect = true;
     qDebug("Wrong size");
   }
 
@@ -216,8 +226,22 @@ YuvImage::YuvImage(const std::string &file_name) :
      case(1024*768)  : width_ =  1024; height_ =  768; break;
      case(832*480)   : width_ =   832; height_ =  480; break;
      case(352*288)   : width_ =   352; height_ =  288; break;
-     default: throw wrong_size();
-   }
+     default: throw wrong_size(); incorrect = true;
+    }
+  }
+
+// Le bloc catch pour traiter les exceptions
+    catch(const wrong_size &error) {
+      std::cerr << "Error: wrong file size = " << error.what() << std::endl;
+      QPainter painter(this);
+      painter.fillRect(rect(), Qt::black);
+      painter.setPen(Qt::white);
+      painter.drawText(rect(), Qt::AlignCenter, "Incorrect file size");
+      incorrect = true;
+    }
+
+
+  if(!incorrect) {
     total_pixels=width_*height_;
     r_ = new double [total_pixels];
     g_ = new double [total_pixels];
@@ -226,11 +250,12 @@ YuvImage::YuvImage(const std::string &file_name) :
 
     // transfert YUV a RGB et mesurer le temps
     YuvImage::RGB_transfert_time_mesure();
-  // create local image of given size
-  // and swap with current image of the class
-  QImage main_image(width_, height_, QImage::Format_RGB32);
-  swap(main_image);
+   // create local image of given size
+   // and swap with current image of the class
+   QImage main_image(width_, height_, QImage::Format_RGB32);
+   swap(main_image);
 
+   // Set the pixel of rgb image
   for (int yp = 0; yp < height_; ++yp) {
     for (int xp = 0; xp < width_; ++xp) {
       setPixel(xp, yp, qRgb(clamp_to_rgb(r_[xp+yp*width_]), clamp_to_rgb(g_[xp+yp*width_]), clamp_to_rgb(b_[xp+yp*width_])));
@@ -246,5 +271,6 @@ YuvImage::YuvImage(const std::string &file_name) :
   delete [] g_;
   delete [] b_;
 
+    }
 }
 
