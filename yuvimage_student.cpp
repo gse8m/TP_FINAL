@@ -57,10 +57,11 @@ int YuvImage::trans(int i) {
 
 void YuvImage::yuv_to_rgb(size_t groupe_idx) {
     int i,i_begin,i_end;
+    // Calculer le début et la fin du groupe correpondant
     i_begin =  groupe_idx    * total_pixels / nb_threads;
     i_end   = (groupe_idx+1) * total_pixels / nb_threads;
 
-
+// Le justement d'utilisation des instructions vectorisées
     if(ImageParameters::instance().get_simd()) {
        SIMD_yuv_to_rgb(i_begin, i_end);
     } else {
@@ -72,7 +73,7 @@ void YuvImage::yuv_to_rgb(size_t groupe_idx) {
     }
 }
 
-//Utiliser les instructions SIMD pour transformer les valeurs de yuv à rgb
+// Utiliser les instructions SIMD pour transformer les valeurs de yuv à rgb
 
 void YuvImage::SIMD_yuv_to_rgb(int begin_, int end_){
     int i = 0;
